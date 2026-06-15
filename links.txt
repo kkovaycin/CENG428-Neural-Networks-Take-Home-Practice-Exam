@@ -1,0 +1,18 @@
+CENG428 Neural Networks - Take-Home Practice Exam Submission
+
+STUDENT INFORMATION:
+Name-Surname: Kübra Kovayçin
+Student ID: 21050111066
+
+NOTE: Due to the large size of embedded matplotlib visualization outputs (images/plots),
+alternative public view links for the 3 Jupyter Notebooks are provided below:
+
+Notebooks Links:
+Github: https://github.com/kkovaycin/CENG428-Neural-Networks-Take-Home-Practice-Exam
+Drive: https://drive.google.com/drive/folders/1nvuTzgTNq7FNqASL-Rhi5OxVuszjrJR3?usp=sharing
+
+Generated Train/Validation/Test Dataset Zip:
+https://drive.google.com/drive/folders/1lYDS_98PThXEGJMxjxjAGlm7Xn9tWhlg?usp=sharing
+
+Trained Model File:
+https://drive.google.com/file/d/1ZnHwHsjT3kkNGOOgxinzWKFxQMqtUaAM/view?usp=sharing
