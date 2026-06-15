@@ -4,60 +4,60 @@
 
 This project implements a CNN-based semantic segmentation pipeline for detecting synthetic shapes added to natural MS COCO images.
 
-The project uses MS COCO 2017 images as natural image backgrounds. The original COCO object labels are not used as target labels. Instead, synthetic shapes are added automatically to the images, and binary segmentation masks are generated from these shapes.
+COCO images are used only as natural image backgrounds. The original COCO object labels are not used. Synthetic shapes are added automatically and binary segmentation masks are generated from these shapes.
 
 The main task is binary semantic segmentation:
 
-* `0`: background
-* `1`: synthetic shape pixel
+- `0`: background pixel
+- `1`: synthetic shape pixel
+
+---
 
 ## Project Structure
 
-The project consists of three Jupyter notebooks:
-
-```text
+```
 01_data_creation.ipynb
 02_model_training.ipynb
 03_model_testing.ipynb
-```
-
-A separate text file is also provided:
-
-```text
 links.txt
+README.md
 ```
 
 The `links.txt` file contains public links for:
 
-1. the generated dataset zip file
-2. the trained model file used by the testing notebook
+1. The generated dataset zip file
+2. The trained model file used by the testing notebook
+
+---
 
 ## Notebook Descriptions
 
-### 1. `01_data_creation.ipynb`
+### `01_data_creation.ipynb`
 
-This notebook prepares the dataset.
+Prepares the dataset.
 
-Main steps:
+- Loads MS COCO 2017 using `torchvision.datasets.CocoDetection`
+- Checks COCO folder structure and annotation files
+- Creates fixed, reproducible train/validation/test splits (sorted image IDs)
+- Adds synthetic shapes to COCO images
+- Generates binary segmentation masks automatically
+- Saves generated images and masks under `generated_data/`
 
-* Loads MS COCO 2017 using `torchvision.datasets.CocoDetection`
-* Checks COCO folder structure and annotation files
-* Creates fixed train, validation, and test splits
-* Adds synthetic shapes to COCO images
-* Generates binary segmentation masks automatically
-* Saves generated images and masks under `generated_data/`
+Split sizes:
 
-The split sizes are:
+| Split      | Size   |
+|------------|--------|
+| Train      | 5,000  |
+| Validation | 1,000  |
+| Test       | 1,000  |
 
-```text
-Train:      5000 images
-Validation: 1000 images
-Test:       1000 images
+Train images: first 5,000 from `train2017` (sorted by image ID).  
+Validation images: first 1,000 from `val2017` (sorted by image ID).  
+Test images: next 1,000 from `val2017`.
+
+Generated dataset structure:
+
 ```
-
-The generated dataset structure is:
-
-```text
 generated_data/
 ├── train/
 │   ├── images/
@@ -72,118 +72,136 @@ generated_data/
 
 Images and masks are saved as `.png` files.
 
-### 2. `02_model_training.ipynb`
+A fixed global seed (`GLOBAL_SEED = 2025`) is used to ensure validation and test samples are reproducible. Training samples are generated randomly to increase diversity. For val/test splits, a per-image deterministic seed is derived using SHA-256 hashing of `split_name + image_id + global_seed`.
 
-This notebook trains a CNN-based segmentation model.
+### `02_model_training.ipynb`
 
-Main steps:
+Trains the CNN-based segmentation model.
 
-* Loads generated train and validation image/mask pairs
-* Creates PyTorch Dataset and DataLoader objects
-* Defines a small U-Net style encoder-decoder CNN
-* Trains the model using a combination of:
+- Loads generated train and validation image/mask pairs
+- Creates PyTorch Dataset and DataLoader objects
+- Defines a small U-Net style encoder-decoder CNN (`SmallUNet`)
+- Trains using a combination of BCE with logits loss and Dice loss
+- Saves the best model based on validation Dice score
 
-  * Binary Cross Entropy Loss with logits
-  * Dice Loss
-* Monitors validation metrics
-* Saves the best model according to validation Dice score
+Training hyperparameters:
 
-The saved model file is:
+| Parameter     | Value  |
+|---------------|--------|
+| Image size    | 256×256 |
+| Batch size    | 8      |
+| Optimizer     | Adam   |
+| Learning rate | 1e-3   |
+| Epochs        | 15     |
 
-```text
-models/best_unet_synthetic_shapes.pth
+Saved model files:
+
+```
+models/best_unet_synthetic_shapes.pth   ← best validation Dice
+models/last_unet_synthetic_shapes.pth   ← last epoch
 ```
 
-The main metrics used during training are:
+Training metrics tracked per epoch:
 
-* IoU / Jaccard Index
-* Dice Score
-* Foreground Precision
-* Foreground Recall
+- Loss (BCE + Dice)
+- IoU / Jaccard Index
+- Dice Score
+- Foreground Precision
+- Foreground Recall
 
-### 3. `03_model_testing.ipynb`
+Training history is saved as `results/metrics/training_history.csv`.
 
-This notebook evaluates the trained model on the test set.
+### `03_model_testing.ipynb`
 
-Main steps:
+Evaluates the trained model on the held-out test set.
 
-* Loads the generated test image/mask pairs
-* Loads the trained U-Net model
-* Computes final test metrics
-* Generates test prediction visualizations
-* Evaluates a simple image-processing baseline
-* Compares the trained model with the baseline
+- Loads the generated test image/mask pairs
+- Loads the best trained U-Net model
+- Computes final test metrics
+- Generates prediction visualizations (12 samples: image / ground truth / prediction)
+- Evaluates a simple grayscale thresholding baseline
+- Compares the trained model against the baseline
 
-The final evaluation metrics are:
+Final evaluation metrics:
 
-* Test IoU
-* Test Dice
-* Test Precision
-* Test Recall
+- Test IoU
+- Test Dice
+- Test Precision
+- Test Recall
+
+Comparison results are saved as `results/test_results/model_vs_baseline.csv`.
+
+---
 
 ## Model Architecture
 
-The project uses a small U-Net style CNN architecture.
+The model is a small U-Net style encoder-decoder CNN (`SmallUNet`, `base_channels=32`).
 
-The model includes:
+```
+Input: [batch_size, 3, 256, 256]
 
-* convolution blocks
-* batch normalization
-* ReLU activations
-* max pooling
-* transposed convolution upsampling
-* skip connections
+Encoder:
+  input_conv  → DoubleConv(3, 32)
+  down1       → MaxPool2d + DoubleConv(32, 64)
+  down2       → MaxPool2d + DoubleConv(64, 128)
+  down3       → MaxPool2d + DoubleConv(128, 256)
+  bottleneck  → MaxPool2d + DoubleConv(256, 512)
 
-The input shape is:
+Decoder (with skip connections):
+  up3 → ConvTranspose2d + DoubleConv(512→256, skip=256, out=256)
+  up2 → ConvTranspose2d + DoubleConv(256→128, skip=128, out=128)
+  up1 → ConvTranspose2d + DoubleConv(128→64,  skip=64,  out=64)
+  up0 → ConvTranspose2d + DoubleConv(64→32,   skip=32,  out=32)
 
-```text
-[batch_size, 3, 256, 256]
+output_conv → Conv2d(32, 1, kernel_size=1)
+
+Output: [batch_size, 1, 256, 256]  (raw logits)
 ```
 
-The output shape is:
+Each `DoubleConv` block: Conv2d → BatchNorm2d → ReLU → Conv2d → BatchNorm2d → ReLU.
 
-```text
-[batch_size, 1, 256, 256]
-```
+---
 
 ## Synthetic Data Generation
 
-Synthetic shapes are added to COCO images to create a segmentation task.
+Synthetic shapes are added to COCO images to create a segmentation task. Shape types include:
 
-The generator includes different shape types such as:
+- circles
+- rectangles
+- triangles
+- ellipses
+- polygons
+- line segments
 
-* circles
-* rectangles
-* triangles
-* ellipses
-* polygons
-* line segments
+To make the task nontrivial, the following difficulty mechanisms are applied:
 
-To make the task nontrivial, several difficulty mechanisms are used:
+- random opacity
+- low-contrast colors sampled from image statistics
+- additive noise
+- random blur
+- overlapping shapes
 
-* random opacity
-* low-contrast colors
-* colors sampled from image statistics
-* additive noise
-* random blur
-* overlapping shapes
-* positive and negative samples
+**Positive samples** contain 1–3 synthetic shapes with non-zero binary masks.  
+**Negative samples** contain no synthetic shapes; their masks are all zeros.
 
-Positive images contain 1 to 3 synthetic shapes. Negative images contain no target synthetic shape, and their masks are all zeros.
+---
 
 ## Baseline
 
-A simple grayscale thresholding baseline is implemented in the testing notebook.
+A simple grayscale thresholding baseline is implemented in the testing notebook for comparison. It requires no training and uses per-image intensity statistics to flag foreground regions:
 
-This baseline does not learn from data. It uses image intensity differences to estimate foreground regions.
+```python
+gray = image.mean(dim=1, keepdim=True)
+prediction = (|gray - mean| > 1.2 * std)
+```
 
-The trained U-Net model is compared against this baseline using the same test metrics.
+The U-Net model is compared against this baseline on the same test metrics.
+
+---
 
 ## Requirements
 
-The main libraries used in this project are:
-
-```text
+```
 torch
 torchvision
 numpy
@@ -194,46 +212,49 @@ tqdm
 pycocotools
 ```
 
+Python 3.x, tested on Google Colab (GPU recommended).
+
+---
+
 ## How to Run
 
-The notebooks should be run in the following order:
+The notebooks must be run in order:
 
-```text
-1. 01_data_creation.ipynb
-2. 02_model_training.ipynb
-3. 03_model_testing.ipynb
+```
+1. 01_data_creation.ipynb   → generates images, masks, splits
+2. 02_model_training.ipynb  → trains the U-Net model
+3. 03_model_testing.ipynb   → evaluates model, compares with baseline
 ```
 
-Before submission, each notebook should be cleared, restarted, run from beginning to end, and saved.
+Each notebook requires Google Drive to be mounted at `/content/drive`.  
+The COCO dataset must be downloaded separately and placed at the expected path.
+
+Before submission: clear all outputs, restart kernel, run from top to bottom, save.
+
+---
 
 ## External Files
 
-The COCO dataset itself is not included in the submission zip.
+The COCO dataset is not included in the submission.
 
-The generated dataset zip and trained model file are provided through public links in:
+The generated dataset and trained model are shared via public links in `links.txt`:
 
-```text
-links.txt
 ```
+Generated Dataset (Train/Val/Test):
+https://drive.google.com/drive/folders/1lYDS_98PThXEGJMxjxjAGlm7Xn9tWhlg?usp=sharing
+
+Trained Model File:
+https://drive.google.com/file/d/1ZnHwHsjT3kkNGOOgxinzWKFxQMqtUaAM/view?usp=sharing
+```
+
+---
 
 ## Submission Contents
 
-The final submission zip contains:
-
-```text
+```
 01_data_creation.ipynb
 02_model_training.ipynb
 03_model_testing.ipynb
 links.txt
 README.md
-```
-
-The `links.txt` file contains:
-
-```text
-Generated Train/Validation/Test Dataset Zip:
-https://drive.google.com/drive/folders/1lYDS_98PThXEGJMxjxjAGlm7Xn9tWhlg?usp=sharing
-
-Trained Model File:
-https://drive.google.com/file/d/1ZnHwHsjT3kkNGOOgxinzWKFxQMqtUaAM/view?usp=sharing
 ```
