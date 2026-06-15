@@ -20,7 +20,6 @@ The main task is binary semantic segmentation:
 02_model_training.ipynb
 03_model_testing.ipynb
 links.txt
-README.md
 ```
 
 The `links.txt` file contains public links for:
@@ -256,5 +255,4 @@ https://drive.google.com/file/d/1ZnHwHsjT3kkNGOOgxinzWKFxQMqtUaAM/view?usp=shari
 02_model_training.ipynb
 03_model_testing.ipynb
 links.txt
-README.md
 ```
